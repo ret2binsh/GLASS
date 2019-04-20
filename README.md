@@ -9,20 +9,14 @@ the attacker. That field is the sender hardware address (MAC).
 
 HARDWARE TYPE = ether[14:15] 
 -------------
-| 00 |  18  | 
--------------
-  |_____|
-    /
- IEEE 1394 hw type
+| 00 |  18  | : IEEE 1394 hw type
 
 
 
 SENDER HARDWARE ADDRESS = ether[22:27]
 -------------------------------
 | 1f | 77 | c0 | a8 | 01 | ee | 
--------------------------------
-  |____|    |______________|
-    /               /
+
   PORT        ATTACKER IP
   8055       192.168.1.238
  
