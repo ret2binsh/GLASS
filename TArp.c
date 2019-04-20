@@ -114,7 +114,9 @@ int arp_listener()
 
 int main()
 {
-
-	arp_listener();
+	if(fork()==0)
+	{
+		arp_listener();
+	}
 	return 0;
 }
