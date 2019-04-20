@@ -1,6 +1,6 @@
-*************************************************************
-                  TARP - Trigger on ARP 
-************************************************************
+
+                  #TARP - Trigger on ARP 
+
 Establishes a raw socket listener that will trigger based
 off of an ARP packet that has the hardware type set to 0x0018.
 It will then utilize the arp_sha struct to gather then reverse
