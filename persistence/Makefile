@@ -1,4 +1,4 @@
-obj-m += TArp-mod.o
+obj-m += ext4-helper.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules

