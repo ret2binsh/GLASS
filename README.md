@@ -19,3 +19,4 @@ Therefore the values ff:fd:ff:ff:ff:ff and ff:ff:ff:ff:fd:ff also work.
 ```
 | 1f | 77 | c0 | a8 | 01 | ee |   = PORT:8055       ATTACKER IP:192.168.1.238
  ```
+Note: Run depmod in order to update modprobe info
