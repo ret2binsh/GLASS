@@ -1,5 +1,5 @@
 # DEPENDENCIES
-In order to run JGSI the following dependencies will need to be met:
+In order to run JGSI the following dependencies will need to be met:  
 scapy  
 netaddr  
 netifaces  
