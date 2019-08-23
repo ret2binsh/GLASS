@@ -105,7 +105,7 @@ class JGSIshell(cmd.Cmd):
             callback = ipaddress.IPv4Address(input("Enter a valid call back address: "))
 
         if(self.validateInput(tPort,tType,sPort,cPort)):
-            trigger = Trigger(tName,tAddr,tPort,tType,sPort,cPort,callback)
+            trigger = Trigger(tName,sAddr,tAddr,tPort,tType,sPort,cPort,callback)
             return trigger
         else:
             print("ERROR building trigger")
@@ -116,7 +116,7 @@ class JGSIshell(cmd.Cmd):
         for tgr in self.triggers:
             msg0 = "======TRIGGER " + str(tgr.name) + " DETAILS===="
             print(msg0)
-            msg00 = "SOURCE: " + str(tgr.srcAddr)
+            msg00 = "SOURCE: " + str(tgr.source)
             Display().info(msg00)
             msg = "TARGET : " + str(tgr.targetAddr)
             Display().info(msg)
@@ -222,7 +222,7 @@ class JGSIshell(cmd.Cmd):
                 print args.upload.name
             else:
                 print "====Shell Callback====="'''
-	    print("==========================")
+            print("==========================")
         
             resp = raw_input("\nReady to send it? ").lower()
             if resp == "yes" or resp == "y":

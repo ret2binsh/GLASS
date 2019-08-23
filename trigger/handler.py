@@ -25,6 +25,8 @@ class HandlerPrompt(Cmd):
         pass
 
     def default(self,inp):
+        if inp == "q" or inp == "quit":
+            return True
         os.system(inp)
 
     def do_exit(self,inp):
@@ -57,13 +59,13 @@ class HandlerPrompt(Cmd):
                 bag[session][0].close()
                 del bag[session]
         except ValueError as err:
-            print "Invalid session"
+            print("Invalid session")
 
     def do_show(self,inp):
         if inp == "options":
-            print "\nListen Port:               %d" % self.handler.listen_port
-            print "Listen Addr:               %s" % self.handler.listen_addr
-            print "Max Connections:           %d\n" % self.handler.max_listen
+            print("\nListen Port:               %d" % self.handler.listen_port)
+            print("Listen Addr:               %s" % self.handler.listen_addr)
+            print("Max Connections:           %d\n" % self.handler.max_listen)
 
     def do_set(self,inp):
         args = inp.split(" ")
@@ -74,7 +76,7 @@ class HandlerPrompt(Cmd):
                 if int(args[1]) in range(1,65536):
                     self.handler.listen_port = int(args[1])
                 else:
-                    print "Select a port from 1-65535"
+                    print("Select a port from 1-65535")
             elif args[0] == "max":
                 if int(args[1]) in range(1,50):
                     self.handler.max_listen = int(args[1])
@@ -84,8 +86,8 @@ class HandlerPrompt(Cmd):
             self.help_set()
 
     def help_set(self):
-        print "Set the port number to listen on or the max tcp connections."
-        print "Usage: set [port|max] <int>"
+        print("Set the port number to listen on or the max tcp connections.")
+        print("Usage: set [port|max] <int>")
 
     def do_bind(self,inp):
         try:
@@ -94,13 +96,13 @@ class HandlerPrompt(Cmd):
 
             x = threading.Thread(target=self.catch_shell, args=(s,self.handler.listen_port))
             x.start()
-            print "Starting listener: %s:%d" % (self.handler.listen_addr,self.handler.listen_port)
+            print("Starting listener: %s:%d" % (self.handler.listen_addr,self.handler.listen_port))
         except socket.error as err:
-            print err.strerror
+            print(err.strerror)
 
     def do_sessions(self,inp):
         for key in bag.keys():
-            print "%d: %d<-----%s" % (key,bag[key][2],bag[key][1][0])
+            print("%d: %d<-----%s" % (key,bag[key][2],bag[key][1][0]))
 
     def do_interact(self,inp):
         try:
@@ -111,11 +113,11 @@ class HandlerPrompt(Cmd):
                 self.help_interact()
         except (ValueError, IndexError) as err:
             self.help_interact()
-            print err
+            print(err)
 
     def help_interact(self):
-        print "Interact with a session."
-        print "Usage: interact <session #>"
+        print("Interact with a session.")
+        print("Usage: interact <session #>")
 
     def do_shell(self, inp):
         os.system(inp)
@@ -127,7 +129,7 @@ class HandlerPrompt(Cmd):
     
         arg.listen(self.handler.max_listen)
         client,c_info = arg.accept()
-        print "\nReceving connection from %s!" % c_info[0]
+        print("\nReceving connection from %s!" % c_info[0])
         bag[session] = (client,c_info,lport)
         arg.close()
         session = session + 1
@@ -168,7 +170,7 @@ class HandlerPrompt(Cmd):
                 callback.send(message + '\n')
                 callback.shutdown(socket.SHUT_RDWR)
                 callback.close()
-                print "Closing down session %d" % session
+                print("Closing down session %d" % session)
                 del bag[session]
                 break
             elif message == "background":
