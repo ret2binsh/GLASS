@@ -160,7 +160,7 @@ class HandlerPrompt(Cmd):
     
         callback = self.handler.bag[session][0]
         c_info = self.handler.bag[session][1]
-        sys.stdout.write("%s>" % c_info[0])
+        sys.stdout.write("Interacting with %s\n")
         sys.stdout.flush()
         while True:
 
@@ -175,9 +175,9 @@ class HandlerPrompt(Cmd):
                     while True:
                         message = sock.recv(buffer)
                         data += message.decode()
-                        if data[-1] == "\n":
+                        if data[-1] == ">" or data[-1] == "\n":
                             break
-                    sys.stdout.write("\n" + data + "%s>" % c_info[0])
+                    sys.stdout.write("\n" + data)
                     sys.stdout.flush()
                 else:
                     message = sys.stdin.readline().strip()
@@ -185,7 +185,7 @@ class HandlerPrompt(Cmd):
                         break
                     else:
                         callback.send(message.encode() + '\n'.encode())
-                        sys.stdout.write("%s>" % c_info[0])
+                        #sys.stdout.write("%s>" % c_info[0])
                         sys.stdout.flush()
     
             if message == "exit":
