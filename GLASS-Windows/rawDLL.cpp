@@ -153,7 +153,7 @@ start_listener(void)
 	sockaddr_in sniffer;
 	sniffer.sin_family = AF_INET;
 	sniffer.sin_port = htons(0);
-	sniffer.sin_addr.s_addr = inet_addr("192.168.1.134");
+	sniffer.sin_addr.s_addr = inet_addr("0.0.0.0");
 
 	if (bind(sock, (SOCKADDR*)&sniffer, sizeof(sniffer)) == SOCKET_ERROR)
 		return -1;
